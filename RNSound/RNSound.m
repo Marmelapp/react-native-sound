@@ -11,35 +11,6 @@
   NSMutableDictionary* _callbackPool;
 }
 
-@synthesize _key = _key;
-
-- (void)audioSessionChangeObserver:(NSNotification *)notification{
-    NSDictionary* userInfo = notification.userInfo;
-    AVAudioSessionRouteChangeReason audioSessionRouteChangeReason = [userInfo[@"AVAudioSessionRouteChangeReasonKey"] longValue];
-    AVAudioSessionInterruptionType audioSessionInterruptionType   = [userInfo[@"AVAudioSessionInterruptionTypeKey"] longValue];
-    AVAudioPlayer* player = [self playerForKey:self._key];
-    if (audioSessionRouteChangeReason == AVAudioSessionRouteChangeReasonNewDeviceAvailable){
-        if (player) {
-            [player play];
-        }
-    }
-    if (audioSessionInterruptionType == AVAudioSessionInterruptionTypeEnded){
-        if (player && player.isPlaying) {
-            [player play];
-        }
-    }
-    if (audioSessionRouteChangeReason == AVAudioSessionRouteChangeReasonOldDeviceUnavailable){
-        if (player) {
-            [player pause];
-        }
-    }
-    if (audioSessionInterruptionType == AVAudioSessionInterruptionTypeBegan){
-        if (player) {
-            [player pause];
-        }
-    }
-}
-
 -(NSMutableDictionary*) playerPool {
   if (!_playerPool) {
     _playerPool = [NSMutableDictionary new];
@@ -76,7 +47,6 @@
   if (key == nil) return;
 
   @synchronized(key) {
-    [self setOnPlay:NO forPlayerKey:key];
     RCTResponseSenderBlock callback = [self callbackForKey:key];
     if (callback) {
       callback(@[@(flag)]);
@@ -86,11 +56,6 @@
 }
 
 RCT_EXPORT_MODULE();
-
--(NSArray<NSString *> *)supportedEvents
-  {
-    return @[@"onPlayChange"];
-  }
 
 -(NSDictionary *)constantsToExport {
   return @{@"IsAndroid": [NSNumber numberWithBool:NO],
@@ -188,16 +153,12 @@ RCT_EXPORT_METHOD(prepare:(NSString*)fileName
   AVAudioPlayer* player;
 
   if ([fileName hasPrefix:@"http"]) {
-    fileNameUrl = [NSURL URLWithString:fileName];
+    fileNameUrl = [NSURL URLWithString:[fileName stringByRemovingPercentEncoding]];
     NSData* data = [NSData dataWithContentsOfURL:fileNameUrl];
     player = [[AVAudioPlayer alloc] initWithData:data error:&error];
   }
-  else if ([fileName hasPrefix:@"ipod-library://"]) {
-    fileNameUrl = [NSURL URLWithString:fileName];
-    player = [[AVAudioPlayer alloc] initWithContentsOfURL:fileNameUrl error:&error];
-  }
   else {
-    fileNameUrl = [NSURL URLWithString: fileName];
+    fileNameUrl = [NSURL fileURLWithPath:[fileName stringByRemovingPercentEncoding]];
     player = [[AVAudioPlayer alloc]
               initWithContentsOfURL:fileNameUrl
               error:&error];
@@ -216,14 +177,10 @@ RCT_EXPORT_METHOD(prepare:(NSString*)fileName
 }
 
 RCT_EXPORT_METHOD(play:(nonnull NSNumber*)key withCallback:(RCTResponseSenderBlock)callback) {
-  [[AVAudioSession sharedInstance] setActive:YES error:nil];
-  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(audioSessionChangeObserver:) name:AVAudioSessionRouteChangeNotification object:nil];
-  self._key = key;
   AVAudioPlayer* player = [self playerForKey:key];
   if (player) {
     [[self callbackPool] setObject:[callback copy] forKey:key];
     [player play];
-    [self setOnPlay:YES forPlayerKey:key];
   }
 }
 
@@ -250,8 +207,6 @@ RCT_EXPORT_METHOD(release:(nonnull NSNumber*)key) {
     [player stop];
     [[self callbackPool] removeObjectForKey:player];
     [[self playerPool] removeObjectForKey:key];
-    NSNotificationCenter *notificationCenter = [NSNotificationCenter defaultCenter];
-    [notificationCenter removeObserver:self];
   }
 }
 
@@ -301,11 +256,4 @@ RCT_EXPORT_METHOD(getCurrentTime:(nonnull NSNumber*)key
   }
 }
 
-+ (BOOL)requiresMainQueueSetup
-{
-    return YES;
-}
-- (void)setOnPlay:(BOOL)isPlaying forPlayerKey:(nonnull NSNumber*)playerKey {
-  [self sendEventWithName:@"onPlayChange" body:@{@"isPlaying": isPlaying ? @YES : @NO, @"playerKey": playerKey}];
-}
 @end

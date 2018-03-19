@@ -1,24 +1,13 @@
 'use strict';
 
-var ReactNative = require('react-native');
-var RNSound = ReactNative.NativeModules.RNSound;
+var RNSound = require('react-native').NativeModules.RNSound;
 var IsAndroid = RNSound.IsAndroid;
 var IsWindows = RNSound.IsWindows;
 var resolveAssetSource = require("react-native/Libraries/Image/resolveAssetSource");
-var eventEmitter = new ReactNative.NativeEventEmitter(RNSound);
+var nextKey = 0;
 
 function isRelativePath(path) {
-  return !/^(\/|http(s?)|asset)/.test(path);
-}
-
-// Hash function to compute key from the filename
-function djb2Code(str) {
-  var hash = 5381, i, char;
-  for (i = 0; i < str.length; i++) {
-      char = str.charCodeAt(i);
-      hash = ((hash << 5) + hash) + char; /* hash * 33 + c */
-  }
-  return hash;
+  return !/^(\/|http(s?))/.test(path);
 }
 
 function Sound(filename, basePath, onError, options) {
@@ -34,33 +23,8 @@ function Sound(filename, basePath, onError, options) {
     }
   }
 
-  this.registerOnPlay = function() {
-    if (this.onPlaySubscription != null) {
-      console.warn('On Play change event listener is already registered');
-      return;
-    }
-
-    if (!IsWindows) {
-      this.onPlaySubscription = eventEmitter.addListener(
-        'onPlayChange',
-        (param) => {
-          const { isPlaying, playerKey } = param;
-          if (playerKey === this._key) {
-            if (isPlaying) {
-              this._playing = true;
-            }
-            else {
-              this._playing = false;
-            }
-          }
-        },
-      );
-    }
-  }
-
   this._loaded = false;
-  this._key = asset ? filename : djb2Code(filename); //if the file is an asset, use the asset number as the key
-  this._playing = false;
+  this._key = nextKey++;
   this._duration = -1;
   this._numberOfChannels = -1;
   this._volume = 1;
@@ -78,9 +42,8 @@ function Sound(filename, basePath, onError, options) {
     }
     if (error === null) {
       this._loaded = true;
-      this.registerOnPlay();
     }
-    onError && onError(error, props);
+    onError && onError(error);
   });
 }
 
@@ -99,28 +62,14 @@ Sound.prototype.play = function(onEnd) {
 
 Sound.prototype.pause = function(callback) {
   if (this._loaded) {
-    RNSound.pause(this._key, () => {
-      this._playing = false;
-      callback && callback();
-    });
+    RNSound.pause(this._key, () => { callback && callback() });
   }
   return this;
 };
 
 Sound.prototype.stop = function(callback) {
   if (this._loaded) {
-    RNSound.stop(this._key, () => {
-      this._playing = false;
-      callback && callback();
-    });
-  }
-  return this;
-};
-
-Sound.prototype.reset = function() {
-  if (this._loaded && IsAndroid) {
-    RNSound.reset(this._key);
-    this._playing = false;
+    RNSound.stop(this._key, () => { callback && callback() });
   }
   return this;
 };
@@ -128,13 +77,6 @@ Sound.prototype.reset = function() {
 Sound.prototype.release = function() {
   if (this._loaded) {
     RNSound.release(this._key);
-    this._loaded = false;
-    if (!IsWindows) {
-      if (this.onPlaySubscription != null) {
-        this.onPlaySubscription.remove();
-        this.onPlaySubscription = null;
-      }
-    }
   }
   return this;
 };
@@ -159,20 +101,6 @@ Sound.prototype.setVolume = function(value) {
     } else {
       RNSound.setVolume(this._key, value);
     }
-  }
-  return this;
-};
-
-Sound.prototype.getSystemVolume = function(callback) {
-  if(IsAndroid) {
-    RNSound.getSystemVolume(callback);
-  }
-  return this;
-};
-
-Sound.prototype.setSystemVolume = function(value) {
-  if (IsAndroid) {
-    RNSound.setSystemVolume(value);
   }
   return this;
 };
@@ -205,7 +133,7 @@ Sound.prototype.setNumberOfLoops = function(value) {
 };
 
 Sound.prototype.setSpeed = function(value) {
-  this._speed = value;
+  this._setSpeed = value;
   if (this._loaded) {
     if (!IsWindows) {
       RNSound.setSpeed(this._key, value);
@@ -242,10 +170,6 @@ Sound.prototype.setCategory = function(value) {
   Sound.setCategory(value, false);
 }
 
-Sound.prototype.isPlaying = function() {
-  return this._playing;
-}
-
 Sound.enable = function(enabled) {
   RNSound.enable(enabled);
 };
@@ -263,7 +187,7 @@ Sound.setActive = function(value) {
 };
 
 Sound.setCategory = function(value, mixWithOthers = false) {
-  if (!IsWindows) {
+  if (!IsAndroid && !IsWindows) {
     RNSound.setCategory(value, mixWithOthers);
   }
 };

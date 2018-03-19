@@ -1,12 +1,11 @@
-#if __has_include(<React/RCTBridgeModule.h>)
-    #import <React/RCTBridgeModule.h>
-#else
+#if __has_include("RCTBridgeModule.h")
     #import "RCTBridgeModule.h"
+#else
+    #import <React/RCTBridgeModule.h>
 #endif
 
 #import <AVFoundation/AVFoundation.h>
-#import <React/RCTEventEmitter.h>
 
-@interface RNSound : RCTEventEmitter <RCTBridgeModule, AVAudioPlayerDelegate>
-@property (nonatomic, weak) NSNumber* _key;
+@interface RNSound : NSObject <RCTBridgeModule, AVAudioPlayerDelegate>
+
 @end
